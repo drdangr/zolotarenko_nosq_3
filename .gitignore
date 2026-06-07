@@ -1,0 +1,18 @@
+# Сирі дані MovieLens — не комітимо (важкі, є README з посиланням на джерело)
+data/ml-1m/
+data/ml-1m.zip
+
+# Великий CSV з оцінками (~24 МБ, 1М рядків) генерується через convert.py
+import/ratings.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / редактори
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
