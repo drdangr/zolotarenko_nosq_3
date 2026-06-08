@@ -663,5 +663,22 @@ SELECT * FROM paths WHERE current_user = 2 ORDER BY depth LIMIT 1;
 - профіль користувача = середній вектор відмічених фільмів; рекомендація = cosine-kNN
   серед фільмів обраного жанру.
 
-Тест підтвердив персоналізацію (різні профілі → різні рекомендації в тому самому жанрі).
-Деталі, запуск і обмеження — у [`bonus_recommender/README.md`](bonus_recommender/README.md).
+Тест підтвердив персоналізацію (різні профілі → різні рекомендації в тому самому жанрі):
+
+![Bonus — веб-інтерфейс рекомендатора](screenshots/bonus.png)
+
+**Запуск:**
+```bash
+# 0. Neo4j піднятий (docker compose up -d у корені проєкту)
+# 1. Один раз побудувати ембеддинги — виконати запити з
+#    bonus_recommender/build_embeddings.cypher у Neo4j Browser
+# 2. Backend (Python 3.12):
+cd bonus_recommender
+python -m venv .venv
+.venv/Scripts/pip install fastapi "uvicorn[standard]" neo4j numpy
+.venv/Scripts/uvicorn app:app --port 8000
+# 3. Відкрити http://localhost:8000
+```
+
+Повний опис, архітектура та обмеження — у
+[`bonus_recommender/README.md`](bonus_recommender/README.md).
