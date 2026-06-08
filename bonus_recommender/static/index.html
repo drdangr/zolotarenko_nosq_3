@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎬 MovieLens Graph Recommender</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --card2: #232735; --accent: #7c5cff;
+    --accent2: #00d4a0; --text: #e8e9ef; --muted: #9aa0b4; --line: #2c3142;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { position: sticky; top: 0; z-index: 10; background: rgba(15,17,23,.97);
+           backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+           padding: 14px 22px; }
+  .htop { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 12px;
+              flex-wrap: wrap; }
+  .pill { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+          padding: 8px 12px; border-radius: 9px; font-size: 14px; }
+  select.pill { cursor: pointer; }
+  button { background: var(--accent); color: #fff; border: none; padding: 9px 16px;
+           border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  .count b { color: var(--accent2); }
+  main { padding: 18px 22px 60px; max-width: 1150px; margin: 0 auto; }
+  #results:empty { display: none; }
+  #results { background: linear-gradient(135deg, #1d2030, #181b26);
+             border: 1px solid var(--accent); border-radius: 14px; padding: 18px 20px;
+             margin-bottom: 26px; }
+  #results h2 { margin: 0 0 4px; font-size: 17px; }
+  #results .hint { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .rec { display: flex; align-items: center; gap: 14px; padding: 10px 12px;
+         border-radius: 10px; background: var(--card2); margin-bottom: 8px; }
+  .rec .rank { font-size: 20px; font-weight: 700; color: var(--accent2);
+               width: 28px; text-align: center; }
+  .rec .t { flex: 1; font-weight: 600; }
+  .rec .meta { color: var(--muted); font-size: 12px; text-align: right; }
+  .genre { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+           padding: 14px 16px; margin-bottom: 16px; }
+  .genre h3 { margin: 0 0 10px; font-size: 15px; display: flex; gap: 8px;
+              align-items: center; }
+  .genre h3 .n { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; background: var(--card2);
+          border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px;
+          font-size: 13px; cursor: pointer; user-select: none; transition: .12s; }
+  .chip:hover { border-color: var(--accent); }
+  .chip input { accent-color: var(--accent2); margin: 0; cursor: pointer; }
+  .chip.on { background: rgba(0,212,160,.13); border-color: var(--accent2); }
+  .chip .yr { color: var(--muted); }
+  .chip .rt { color: var(--accent2); font-size: 11px; }
+  .loading { color: var(--muted); padding: 40px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="htop">
+    <h1>🎬 Graph Recommender</h1>
+    <span class="sub">рекомендації на графових ембеддингах (FastRP) поверх MovieLens 1M</span>
+  </div>
+  <div class="controls">
+    <span class="pill count">Вибрано: <b id="cnt">0</b></span>
+    <span class="sub">→ обери жанр для рекомендації:</span>
+    <select class="pill" id="genreSel"></select>
+    <button id="recBtn">Отримати топ-5 ✨</button>
+  </div>
+</header>
+<main>
+  <div id="results"></div>
+  <div id="catalog"><div class="loading">Завантаження каталогу…</div></div>
+</main>
+
+<script>
+const liked = new Set();          // movieId
+const $ = s => document.querySelector(s);
+
+function updateCount() { $('#cnt').textContent = liked.size; }
+
+async function init() {
+  const data = await (await fetch('/api/genres?top=10')).json();
+  const sel = $('#genreSel');
+  data.genres.forEach(g => {
+    const o = document.createElement('option');
+    o.value = g.genre; o.textContent = g.genre; sel.appendChild(o);
+  });
+  const cat = $('#catalog'); cat.innerHTML = '';
+  data.genres.forEach(g => {
+    const sec = document.createElement('div'); sec.className = 'genre';
+    sec.innerHTML = `<h3>${g.genre} <span class="n">${g.films.length} фільмів</span></h3>`;
+    const chips = document.createElement('div'); chips.className = 'chips';
+    g.films.forEach(f => {
+      const m = f.title.match(/^(.*)\s\((\d{4})\)$/);
+      const name = m ? m[1] : f.title, yr = m ? m[2] : '';
+      const lbl = document.createElement('label'); lbl.className = 'chip';
+      lbl.innerHTML = `<input type="checkbox" value="${f.id}">
+        <span>${name}</span> <span class="yr">${yr}</span>
+        <span class="rt">★${f.avg ?? '—'}</span>`;
+      const cb = lbl.querySelector('input');
+      cb.addEventListener('change', () => {
+        if (cb.checked) liked.add(f.id); else liked.delete(f.id);
+        // синхронізуємо інші чекбокси цього ж фільму (фільм може бути в кількох жанрах)
+        document.querySelectorAll(`input[value="${f.id}"]`).forEach(o => {
+          o.checked = cb.checked; o.closest('.chip').classList.toggle('on', cb.checked);
+        });
+        updateCount();
+      });
+      chips.appendChild(lbl);
+    });
+    sec.appendChild(chips); cat.appendChild(sec);
+  });
+}
+
+async function recommend() {
+  if (liked.size === 0) { alert('Спершу відміть хоча б один улюблений фільм 🙂'); return; }
+  const genre = $('#genreSel').value;
+  const res = await (await fetch('/api/recommend', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ likedIds: [...liked], genre })
+  })).json();
+  const box = $('#results');
+  if (res.error) { box.innerHTML = `<h2>⚠️ ${res.error}</h2>`; return; }
+  box.innerHTML = `<h2>Топ-5 у жанрі «${res.genre}»</h2>
+    <div class="hint">на основі профілю з ${res.profileSize} відмічених фільмів • score = cosine схожість смаку</div>`;
+  res.recommendations.forEach((r, i) => {
+    const div = document.createElement('div'); div.className = 'rec';
+    div.innerHTML = `<div class="rank">${i+1}</div>
+      <div class="t">${r.title}</div>
+      <div class="meta">★ ${r.avg ?? '—'} · ${r.num} оцінок<br>sim ${r.score}</div>`;
+    box.appendChild(div);
+  });
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('#recBtn').addEventListener('click', recommend);
+init();
+</script>
+</body>
+</html>
